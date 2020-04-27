@@ -221,12 +221,15 @@ impl Terminal {
         Key::Enter => break,
         Key::Backspace => {
           if x != 0 { x -= 1; } else { self.raw_move_next(); continue; }
-          self.raw_delete_prev();
+          self.raw_delete();
+          r.pop();
         },
         Key::Alpha(c) => {
+          self.raw_delete_prev();
           x += 1;
           r.push(c);
-          self.raw_out(c.to_string());
+          self.out(c.to_string());
+          
         },
         _ => continue
       }

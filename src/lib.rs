@@ -21,7 +21,8 @@ mod tests {
   #[test]
   fn input() {
     let t = Terminal::new();
-    t.ask("> ".into());
+    let a = t.ask("> ".into());
+    println!("{}", a);
   }
 
   #[test]
