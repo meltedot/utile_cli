@@ -1,7 +1,7 @@
 [package]
 name = "utile_cli"
 version = "0.1.0"
-authors = ["Poliveira"]
+authors = ["meltedot"]
 edition = "2018"
 description = "Useful abstractions for pancurses."
 readme = "README.md"
