@@ -45,6 +45,7 @@ mod tests {
 
   #[test]
   fn get_char() {
+    // test
     let t = Terminal::new();
     assert_eq!(t.get_char().unwrap(), Key::F3);
   }
