@@ -16,7 +16,7 @@ main.rs
 ```rust
 extern crate utile_cli;
 
-use utile_cli::{Terminal};
+use utile_cli::cli::{Terminal};
 
 fn main() {
   let term = Terminal::new();
