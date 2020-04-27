@@ -3,7 +3,7 @@ Useful abstractions for Rust's pancurses. The aim is to ease pancurses developme
 
 ## Documentation
 ## Requirements
-View the [pancurses](https://github.com/ihalila/pancurses) repository
+Visit the [pancurses](https://github.com/ihalila/pancurses) repository
 
 ## Usage
 Cargo.toml
