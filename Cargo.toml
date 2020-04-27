@@ -1,8 +1,11 @@
 [package]
 name = "utile_cli"
 version = "0.1.0"
-authors = ["Poliveira"]
-edition = "2018"
+authors = ["meltedot"]
+edition = "2020"
+description = "Useful abstractions for pancurses."
+readme = "README.md"
+repository = "https://github.com/meltedot/utile_cli"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
