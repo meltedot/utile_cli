@@ -9,7 +9,7 @@ Visit the [pancurses](https://github.com/ihalila/pancurses) repository
 Cargo.toml
 ```toml
 [dependencies]
-utile_cli = "0.1.2"
+utile_cli = "0.2.0"
 ```
 
 main.rs
