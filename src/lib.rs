@@ -4,7 +4,7 @@ pub mod cli;
 mod tests {
   use super::*;
   use cli::*;
-    #[test]
+  #[test]
   fn term() {
     Terminal::new();
   }
@@ -48,5 +48,17 @@ mod tests {
   fn get_char() {
     let t = Terminal::new();
     assert_eq!(t.get_char().unwrap(), Key::F3);
+  }
+
+  #[test]
+  fn mask() {
+    let t = Terminal::new();
+    println!("{}", t.mask("> ".into(), '?'));
+  }
+
+  #[test]
+  fn yes_no() {
+    let t = Terminal::new();
+    println!("{}", t.yesno("y/n".into(), true));
   }
 }

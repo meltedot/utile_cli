@@ -1,8 +1,59 @@
 extern crate pancurses;
 use pancurses::{Window, Input, initscr};
 
+/// A terminal containing a pancurses window.
+/// 
+/// Contains multiple abstractions over pancurses.
+/// 
+/// # Examples
+/// Creating a terminal:
+/// ```
+/// let t = Terminal::new()
+/// ```
 pub struct Terminal {
-  win: Window
+  win: Window,
+  layers: Vec<Layer>
+}
+
+/// An arbitrary type that contains a position and content.
+/// A layer can be positioned anywhere in the console, and it can instead be edited as a string without manual manipulation of the cursor.
+/// 
+/// A layer is one dimensional, meaning that it does not fit multiple lines.
+/// 
+/// Layers may shrink and grow, however have allocated space in the terminal, for example, a layer with content "Hello" which then is changed to "Bye" will actually appear on the console as "Bye  " (with two spaces).
+/// This means that they have their own space depending on their longest length string.
+/// This trait is useful for hiding certain objects from view, however can be reset using `shrink` which removes trailing whitespace.
+/// 
+/// # Examples
+/// A layer can be initialized using `new`:
+/// ```
+/// let layer = Layer::new(0, 0);
+/// layer.set_content("Hello world!".into());
+/// ```
+/// 
+/// A layer can then be displayed from a terminal either by being added using `add_layer` and then displayed using `refresh`:
+/// ```
+/// let new: &Layer = t.add_layer(layer);
+/// t.refresh();
+/// ```
+/// 
+/// Or it can be displayed externally by using `draw_layer`:
+/// ```
+/// t.draw_layer(&layer);
+/// t.draw_layer_static(&layer); // <- a layer can also be drawn without editting the cursor position
+/// ```
+/// 
+/// A layer also contains another type of content called `inner_content` which will *never* be displayed to the terminal, however may contain useful data about the layer:
+/// ```
+/// layer.inner_content = "Hello rust!".into();
+/// layer.inner_to_outer(); // <- replaces the outer content with the inner content.
+/// ```
+pub struct Layer {
+  pub posx: i32,
+  pub posy: i32,
+  pub inner_content: String,
+  content: String,
+  length: usize
 }
 
 #[derive(Debug, PartialEq)]
@@ -18,28 +69,89 @@ pub enum Key {
   F1,F2,F3,F4,F5,F6,F7,F8,F9,F10,F11,F12
 }
 
-/// A terminal containing a pancurses window.
-/// 
-/// Contains multiple abstractions over pancurses.
-/// 
-/// # Examples
-/// Creating a terminal:
-/// ```
-/// let t = Terminal::new()
-/// ```
+
+impl Layer {
+  /// Returns a new layer at `posx`, `posy`
+  pub fn new(posx: i32, posy: i32) -> Layer {
+    Layer { posx, posy, content: String::new(), inner_content: String::new(), length: 0 }
+  }
+
+  /// Returns a clone of the outer content of the layer.
+  pub fn get_content(&self) -> String {
+    self.content.clone()
+  }
+
+  /// Sets the current outer content of the layer.
+  pub fn set_content(&mut self, c: String) {
+    self.content = c;
+    if self.content.len() > self.length {
+      self.length = self.content.len();
+    }
+  }
+
+  /// Replaces the outer content with the inner content.
+  pub fn inner_to_outer(&mut self) {
+    self.set_content(self.inner_content.clone());
+  }
+
+  /// Removes any hiding content.
+  pub fn shrink(&mut self) {
+    self.length = self.content.len();
+  }
+}
+
 impl Terminal {
 
   /// Creates a new terminal
   pub fn new() -> Terminal {
     let win = initscr();
     win.keypad(true);
-    Terminal { win }
+    Terminal { win, layers: vec![] }
+  }
+
+  pub fn add_layer(&mut self, layer: Layer) -> &Layer {
+    let idx = self.layers.len() - 1;
+    self.layers.push(layer);
+    &self.layers[idx]
+  }
+
+  /// Refreshes and re-draws all layers.
+  pub fn refresh(&self) {
+    self.win.refresh();
+    let here = self.raw_posxy();
+    for layer in &self.layers {
+      self.raw_move(layer.posx, layer.posy);
+      self.raw_out(layer.get_content());
+    }
+    self.raw_move(here.0, here.1);
+    self.win.refresh();
+  }
+
+  /// Draws a layer to the console.
+  pub fn draw_layer(&self, layer: &Layer) {
+    self.raw_move(layer.posx, layer.posy);
+    self.out_static(" ".repeat(layer.length)); // clear layer
+    self.out(layer.get_content());
+  }
+
+  /// Draws a layer to the console however does not affect the cursor.
+  pub fn draw_layer_static(&self, layer: &Layer) {
+    let here = self.raw_posxy();
+    self.draw_layer(layer);
+    self.raw_move(here.0, here.1);
   }
   
   /// Outputs a string over the cursor.
   pub fn out(&self, s: String) {
     self.win.printw(s);
-    self.win.refresh();
+    self.refresh();
+  }
+
+  /// Outputs a string that does not affect the cursor position.
+  pub fn out_static(&self, s: String) {
+    let here = self.raw_posxy();
+    self.out(s);
+    self.raw_move(here.0, here.1);
   }
 
   /// Outputs a string over the cursor and outputs a break / newline.
@@ -51,7 +163,7 @@ impl Terminal {
   /// Outputs a newline.
   pub fn outbr(&self) {
     self.win.printw(String::from("\n"));
-    self.win.refresh();
+    self.refresh();
   }
 
   /// Outputs a string without refreshing the terminal.
@@ -68,11 +180,6 @@ impl Terminal {
   /// Outputs a newline without refreshing the terminal.
   pub fn raw_br(&self) {
     self.win.printw(String::from("\n"));
-  }
-
-  /// Refreshes the terminal, flushing the output and displaying all changes to the screen.
-  pub fn raw_refresh(&self) {
-    self.win.refresh();
   }
 
   /// Returns a tuple containing the current cursor position in the form (x, y)
@@ -183,7 +290,6 @@ impl Terminal {
     match self.win.getch() {
       Some(Input::Character('\n')) | Some(Input::Character('\r')) => Some(Key::Enter),
       Some(Input::Character('\x08')) => Some(Key::Backspace),
-      Some(Input::Character(' ')) => Some(Key::Space),
       Some(Input::Character(c)) => Some(Key::Alpha(c)),
       Some(Input::KeyUp) => Some(Key::ArrowUp),
       Some(Input::KeyDown) => Some(Key::ArrowDown),
@@ -206,6 +312,18 @@ impl Terminal {
     }
   }
 
+  /// Returns a character however hides it from input.
+  pub fn get_char_hidden(&self) -> Option<Key> {
+    let here = self.raw_posxy();
+    let ret = self.get_char();
+    match ret {
+      Some(Key::Alpha(c)) => { self.raw_delete_prev(); },
+      _ | None => ()
+    }
+    self.raw_move(here.0, here.1);
+    ret
+  }
+
   /// Asks the user for input, prefixing the question with `prefix`
   /// 
   /// # Examples
@@ -214,27 +332,96 @@ impl Terminal {
   /// ```
   pub fn ask(&self, prefix: String) -> String {
     self.out(prefix);
-    let mut r = String::new();
-    let mut x = 0;
-    while let Some(i) = self.get_char() {
+    let mut r = Layer::new(self.raw_posx(), self.raw_posy());
+    while let Some(i) = self.get_char_hidden() {
       match i {
         Key::Enter => break,
         Key::Backspace => {
-          if x != 0 { x -= 1; } else { self.raw_move_next(); continue; }
-          self.raw_delete();
-          r.pop();
+          if let Some(i) = r.get_content().pop() {
+            let mut content = r.get_content();
+            content.pop();
+            r.set_content(content);
+            self.draw_layer(&r);
+          } else {
+            self.raw_move_next();
+            continue;
+          }
         },
         Key::Alpha(c) => {
-          self.raw_delete_prev();
-          x += 1;
-          r.push(c);
-          self.out(c.to_string());
-          
+          let mut content = r.get_content();
+          content.push(c);
+          r.set_content(content);
+          self.draw_layer(&r);
         },
-        _ => continue
+        _ => continue,
       }
     }
-    r
+    r.get_content()
+  }
+
+  /// Asks the user for input, however the input is masked by a series of `mask` to hide the input.
+  pub fn mask(&self, prefix: String, mask: char) -> String {
+    self.out(prefix);
+    let mut r = Layer::new(self.raw_posx(), self.raw_posy());
+    let mut s = String::new();
+    while let Some(i) = self.get_char_hidden() {
+      match i {
+        Key::Enter => break,
+        Key::Backspace => {
+          if let Some(i) = r.get_content().pop() {
+            let mut content = r.get_content();
+            content.pop();
+            r.set_content(content);
+            self.draw_layer(&r);
+            s.pop();
+          } else {
+            self.raw_move_next();
+            continue;
+          }
+        },
+        Key::Alpha(c) => {
+          let mut content = r.get_content();
+          content.push(mask);
+          s.push(c);
+          r.set_content(content);
+          self.draw_layer(&r);
+        },
+        _ => continue,
+      }
+    }
+    s
+  }
+
+  pub fn yesno(&self, suffix: String, default: bool) -> bool {
+    let yn: Vec<String> = suffix.split('/').map(|s| String::from(s)).collect();
+    if yn.len() == 1 {
+      panic!("Expected a '/' character separating a yes no question!");
+    }
+    let mut ynl = Layer::new(self.raw_posx(), self.raw_posy());
+    let mut y = yn[0].clone();
+    let mut n = yn[1].clone();
+    match default {
+      true => { y = y.to_uppercase(); },
+      false => { n = n.to_uppercase(); },
+    }
+    ynl.set_content(format!("({}/{})", y.clone(), n.clone()));
+    self.draw_layer(&ynl);
+    let mut ret = default;
+    while let Some(i) = self.get_char_hidden() {
+      match i {
+        Key::Enter => break,
+        Key::ArrowRight => { ret = false; },
+        Key::ArrowLeft => { ret = true; },
+        _ => continue
+      }
+      match ret {
+        true => { y = { n = n.to_lowercase(); y.to_uppercase() } },
+        false => { n = { y = y.to_lowercase(); n.to_uppercase() } },
+      }
+      ynl.set_content(format!("({}/{})", y.clone(), n.clone()));
+      self.draw_layer(&ynl);
+    }
+    ret
   }
 
   /// Gives the user choices between strings.
@@ -247,48 +434,43 @@ impl Terminal {
   /// ```
   /// Output if selected was `c2`: `c2`
   pub fn choices(&self, prefix: String, strs: Vec<String>) -> String {
-    let mut y: i32 = 0;
-    let here = self.raw_posxy();
-    let mut i = 0;
-    for str in strs.clone() {
+    self.outbr();
+    let mut layers: Vec<Layer> = vec![];
+    for (i , str) in strs.iter().enumerate() {
+      let mut l = Layer::new(self.raw_posx(), self.raw_posy() + i as i32);
+      l.inner_content = str.clone();
       if i == 0 {
-        self.out(prefix.clone());
-      }
-      self.outln(str);
-      i += 1;
+        l.set_content(format!("{}{}", prefix.clone(), l.inner_content.clone()));
+      } else { l.inner_to_outer(); }
+      self.draw_layer_static(&l);
+      layers.push(l);
     }
-    self.raw_move(here.0 + (prefix.len() + strs[0].clone().len()) as i32, here.1);
-    while let Some(i) = self.get_char() {
+
+    self.raw_move_offset(0, layers.len() as i32);
+    let mut y = 0;
+    while let Some(i) = self.get_char_hidden() {
       match i {
         Key::Enter => break,
         Key::ArrowDown => {
-          if y + 1 >= strs.len() as i32 {
-            continue;
+          if (y < layers.len() - 1) {
+            y += 1;
           }
-          y += 1;
-          self.raw_delete_to(0);
-          self.out(strs[(y - 1) as usize].clone());
-          self.raw_move_offset(0, 1);
-          self.raw_delete_from(prefix.clone().len() + strs[y as usize].clone().len());
-          self.out(prefix.clone());
-          self.out(strs[y as usize].clone());
         },
         Key::ArrowUp => {
-          if (y - 1) < 0 {
-            continue;
+          if (y > 0) {
+            y -= 1;
           }
-          y -= 1;
-          self.raw_delete_to(0);
-          self.out(strs[(y + 1) as usize].clone());
-          self.raw_move_offset(0, -1);
-          self.raw_delete_from(prefix.clone().len() + strs[y as usize].clone().len());
-          self.out(prefix.clone());
-          self.out(strs[y as usize].clone());
-        },
-        _ => continue,
+        }
+        _ => continue
+      }
+      for (i, l) in layers.iter_mut().enumerate() {
+        if i == y {
+          l.set_content(format!("{}{}", prefix.clone(), l.inner_content.clone()));
+        } else { l.inner_to_outer(); }
+        self.draw_layer_static(&l);
       }
     }
-    self.raw_move_offset(0, strs.len() as i32 - y - 1);
-    strs[y as usize].clone()
+    
+    layers[y].inner_content.clone()
   }
 }
