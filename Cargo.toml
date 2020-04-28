@@ -1,6 +1,6 @@
 [package]
 name = "utile_cli"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["meltedot"]
 edition = "2018"
 description = "Useful abstractions for pancurses."
