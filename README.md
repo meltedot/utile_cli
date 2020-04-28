@@ -11,7 +11,7 @@ Visit the [documentation](https://docs.rs/utile_cli/0.2.0/utile_cli/)
 Cargo.toml
 ```toml
 [dependencies]
-utile_cli = "0.2.0"
+utile_cli = "0.2.1"
 ```
 
 main.rs
