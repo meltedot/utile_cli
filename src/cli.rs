@@ -392,6 +392,17 @@ impl Terminal {
     s
   }
 
+  /// Asks a y/n question to the user, returning a boolean (true if yes).
+  /// 
+  /// The `suffix` parameter must be specified like "exampley/examplen" (must contain a '/')
+  /// The `default` parameter is the default highlighted y/n
+  /// 
+  /// You can choose a yes or a no using the left and right arrow keys.
+  /// # Examples
+  /// ```
+  /// t.yesno("y/n".into(), true)
+  /// ```
+  /// Outputs: (Y/n)
   pub fn yesno(&self, suffix: String, default: bool) -> bool {
     let yn: Vec<String> = suffix.split('/').map(|s| String::from(s)).collect();
     if yn.len() == 1 {
