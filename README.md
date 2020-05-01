@@ -6,12 +6,12 @@ Useful abstractions for Rust's pancurses. The aim is to ease pancurses developme
 Visit the [pancurses](https://github.com/ihalila/pancurses) repository
 
 ## Usage
-Visit the [documentation](https://docs.rs/utile_cli/0.2.0/utile_cli/)
+Visit the [documentation](https://docs.rs/utile_cli/0.3.0/utile_cli/)
 
 Cargo.toml
 ```toml
 [dependencies]
-utile_cli = "0.2.1"
+utile_cli = "0.3.0"
 ```
 
 main.rs
