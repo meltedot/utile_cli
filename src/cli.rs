@@ -149,12 +149,15 @@ impl Layer {
 }
 
 impl Layer2D {
+  /// Returns a new layer2d at `posx`, `posy` with length and height.
+  /// Position is determined from the top left corner.
   pub fn new(posx: i32, posy: i32, length: usize, height: usize, populator: Layer) -> Layer2D {
     let mut l = Layer2D { posx, posy, length, height, layers: vec![], char_count: 0 };
     l.populate(populator);
     l
   }
 
+  /// Populates a layer2d with `populator`
   pub fn populate(&mut self, populator: Layer) {
     let n = populator.clone();
     self.char_count = n.get_content().len();
@@ -168,10 +171,12 @@ impl Layer2D {
                               }).collect();
   }
 
+  /// Returns a *mutable* reference to the layer at x and y
   pub fn index(&mut self, x: usize, y: usize) -> &mut Layer {
     &mut self.layers[x + y * self.length]
   }
 
+  /// Returns a *immutable* reference to the layer at x and y
   pub fn get(&self, x: usize, y: usize) -> &Layer {
     &self.layers[x + y * self.length]
   }
