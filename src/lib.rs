@@ -61,4 +61,15 @@ mod tests {
     let t = Terminal::new();
     println!("{}", t.yesno("y/n".into(), true));
   }
+
+  #[test]
+  fn layer2d() {
+    let mut t = Terminal::new();
+    let mut l = Layer::new(0, 0);
+    l.set_content("Xana".into());
+    let l2d = Layer2D::new(0, 0, 5, 5, l);
+    let l2d = t.add_layer2d(l2d);
+    t.refresh();
+    t.get_char();
+  }
 }

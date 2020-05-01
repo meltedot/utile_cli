@@ -12,7 +12,8 @@ use pancurses::{Window, Input, initscr};
 /// ```
 pub struct Terminal {
   win: Window,
-  layers: Vec<Layer>
+  layers: Vec<Layer>,
+  layer2ds: Vec<Layer2D>
 }
 
 /// An arbitrary type that contains a position and content.
@@ -33,7 +34,7 @@ pub struct Terminal {
 /// 
 /// A layer can then be displayed from a terminal either by being added using `add_layer` and then displayed using `refresh`:
 /// ```
-/// let new: &Layer = t.add_layer(layer);
+/// let new: &mut Layer = t.add_layer(layer);
 /// t.refresh();
 /// ```
 /// 
@@ -48,12 +49,59 @@ pub struct Terminal {
 /// layer.inner_content = "Hello rust!".into();
 /// layer.inner_to_outer(); // <- replaces the outer content with the inner content.
 /// ```
+#[derive(Clone, Debug)]
 pub struct Layer {
   pub posx: i32,
   pub posy: i32,
   pub inner_content: String,
   content: String,
   length: usize
+}
+
+/// An arbitrary type that derives from Layer however can handle both X and Y coordinates.
+/// A Layer2D contains an (2D) array of layers allowing them to be rendered in a container and be indexed as such.
+/// 
+/// # Examples
+/// A Layer2D can be initialized using `new`:
+/// ```
+/// let l = Layer::new(0, 0);
+/// let l2d = Layer2D::new(0, 0, 5, 5, l);
+/// ```
+/// `l` in this case is the *populator* which will fill the Layer2D on initialization.
+/// `l` also does not need any positional arguments as they will be overriden on the l2d initialization.
+/// 
+/// A Layer2D can be populated again using the `populate` method:
+/// ```
+/// let l2 = Layer::new(0, 0);
+/// l2.set_content("X".into());
+/// l2d.populate(l2);
+/// ```
+/// This results in a 5x5 box of `X` characters.
+/// 
+/// Any layer in a Layer2D can be retrieved using `index` or `get`:
+/// ```
+/// l2d.index(3, 4); // returns a *mutable* Layer (&mut Layer)
+/// l2d.get(3, 4);   // returns a *immutable* Layer (&Layer)
+/// ```
+/// 
+/// A layer can be displayed from a terminal using `add_layer2d` and `refresh`, much like regular layers:
+/// ```
+/// t.add_layer2d(l2d); // <- returns a &mut Layer2D which can be editted
+/// t.refresh();
+/// ```
+/// 
+/// Or it can be displayed externally by using `draw_layer2d`:
+/// ```
+/// t.draw_layer2d(&layer);
+/// t.draw_layer2d_static(&layer); // <- a layer can also be drawn without editting the cursor position
+/// ```
+pub struct Layer2D {
+  pub posx: i32,
+  pub posy: i32,
+  pub length: usize,
+  pub height: usize,
+  pub layers: Vec<Layer>,
+  char_count: usize
 }
 
 #[derive(Debug, PartialEq)]
@@ -100,19 +148,52 @@ impl Layer {
   }
 }
 
+impl Layer2D {
+  pub fn new(posx: i32, posy: i32, length: usize, height: usize, populator: Layer) -> Layer2D {
+    let mut l = Layer2D { posx, posy, length, height, layers: vec![], char_count: 0 };
+    l.populate(populator);
+    l
+  }
+
+  pub fn populate(&mut self, populator: Layer) {
+    let n = populator.clone();
+    self.char_count = n.get_content().len();
+    self.layers = std::iter::repeat(n).take(self.length * self.height)
+                              .enumerate()
+                              .map(|(i, l)| { 
+                                let mut x = l.clone(); 
+                                x.posx = (i % self.length * self.char_count) as i32; 
+                                x.posy = ((i / self.length) as f64).floor() as i32; 
+                                x 
+                              }).collect();
+  }
+
+  pub fn index(&mut self, x: usize, y: usize) -> &mut Layer {
+    &mut self.layers[x + y * self.length]
+  }
+
+  pub fn get(&self, x: usize, y: usize) -> &Layer {
+    &self.layers[x + y * self.length]
+  }
+}
+
 impl Terminal {
 
   /// Creates a new terminal
   pub fn new() -> Terminal {
     let win = initscr();
     win.keypad(true);
-    Terminal { win, layers: vec![] }
+    Terminal { win, layers: vec![], layer2ds: vec![] }
   }
 
-  pub fn add_layer(&mut self, layer: Layer) -> &Layer {
-    let idx = self.layers.len() - 1;
+  pub fn add_layer(&mut self, layer: Layer) -> &mut Layer {
     self.layers.push(layer);
-    &self.layers[idx]
+    self.layers.last_mut().unwrap()
+  }
+
+  pub fn add_layer2d(&mut self, layer: Layer2D) -> &mut Layer2D {
+    self.layer2ds.push(layer);
+    self.layer2ds.last_mut().unwrap()
   }
 
   /// Refreshes and re-draws all layers.
@@ -120,8 +201,10 @@ impl Terminal {
     self.win.refresh();
     let here = self.raw_posxy();
     for layer in &self.layers {
-      self.raw_move(layer.posx, layer.posy);
-      self.raw_out(layer.get_content());
+      self.draw_layer(layer);
+    }
+    for layer2d in &self.layer2ds {
+      self.draw_layer2d(layer2d);
     }
     self.raw_move(here.0, here.1);
     self.win.refresh();
@@ -130,12 +213,25 @@ impl Terminal {
   /// Draws a layer to the console.
   pub fn draw_layer(&self, layer: &Layer) {
     self.raw_move(layer.posx, layer.posy);
-    self.out_static(" ".repeat(layer.length)); // clear layer
-    self.out(layer.get_content());
+    self.raw_out_static(" ".repeat(layer.length)); // clear layer
+    self.raw_out(layer.get_content());
   }
 
   /// Draws a layer to the console however does not affect the cursor.
   pub fn draw_layer_static(&self, layer: &Layer) {
+    let here = self.raw_posxy();
+    self.draw_layer(layer);
+    self.raw_move(here.0, here.1);
+  }
+
+  /// Draws a layer2D to the console.
+  pub fn draw_layer2d(&self, layer: &Layer2D) {
+    self.raw_move(layer.posx, layer.posy);
+    layer.layers.iter().for_each(|l| self.draw_layer_static(l) );
+  }
+
+  /// Draws a layer2D to the console however does not affect the cursor.
+  pub fn draw_layer2d_static(&self, layer: &Layer) {
     let here = self.raw_posxy();
     self.draw_layer(layer);
     self.raw_move(here.0, here.1);
@@ -169,6 +265,13 @@ impl Terminal {
   /// Outputs a string without refreshing the terminal.
   pub fn raw_out(&self, s: String) {
     self.win.printw(s);
+  }
+
+  /// Outputs a string that does not affect the cursor position and does not refresh the terminal.
+  pub fn raw_out_static(&self, s: String) {
+    let here = self.raw_posxy();
+    self.raw_out(s);
+    self.raw_move(here.0, here.1);
   }
 
   /// Outputs a string and a break / newline without refreshing the terminal.
