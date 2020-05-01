@@ -66,9 +66,26 @@ mod tests {
   fn layer2d() {
     let mut t = Terminal::new();
     let mut l = Layer::new(0, 0);
-    l.set_content("Xana".into());
+    l.set_content("X".into());
     let l2d = Layer2D::new(0, 0, 5, 5, l);
     let l2d = t.add_layer2d(l2d);
+    t.refresh();
+    t.get_char();
+  }
+
+  #[test]
+  fn layer_arr() {
+    let mut t = Terminal::new();
+    let mut behindl = Layer::new(0, 0);
+    behindl.set_content("X".into());
+    let mut behindl2d = Layer2D::new(0, 0, 4, 4, behindl);
+    t.add_layer2d(behindl2d);
+    let mut frontl = Layer::new(0, 0);
+    frontl.set_content("Y".into());
+    let mut frontl2d = Layer2D::new(0, 0, 2, 2, frontl);
+    t.add_layer2d(frontl2d);
+    t.layer_swap(0, -1);
+    println!("{:?}", t.layer_back());
     t.refresh();
     t.get_char();
   }

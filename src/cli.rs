@@ -12,8 +12,11 @@ use pancurses::{Window, Input, initscr};
 /// ```
 pub struct Terminal {
   win: Window,
-  layers: Vec<Layer>,
-  layer2ds: Vec<Layer2D>
+  layers: LayerArrangement
+}
+
+struct LayerArrangement {
+  layer_stack: Vec<Layer2D>
 }
 
 /// An arbitrary type that contains a position and content.
@@ -95,13 +98,15 @@ pub struct Layer {
 /// t.draw_layer2d(&layer);
 /// t.draw_layer2d_static(&layer); // <- a layer can also be drawn without editting the cursor position
 /// ```
+#[derive(Clone, Debug)]
 pub struct Layer2D {
   pub posx: i32,
   pub posy: i32,
   pub length: usize,
   pub height: usize,
   pub layers: Vec<Layer>,
-  char_count: usize
+  char_count: usize,
+  stack_loc: i32
 }
 
 #[derive(Debug, PartialEq)]
@@ -130,11 +135,12 @@ impl Layer {
   }
 
   /// Sets the current outer content of the layer.
-  pub fn set_content(&mut self, c: String) {
+  pub fn set_content(&mut self, c: String) -> &mut Layer {
     self.content = c;
     if self.content.len() > self.length {
       self.length = self.content.len();
     }
+    self
   }
 
   /// Replaces the outer content with the inner content.
@@ -152,7 +158,7 @@ impl Layer2D {
   /// Returns a new layer2d at `posx`, `posy` with length and height.
   /// Position is determined from the top left corner.
   pub fn new(posx: i32, posy: i32, length: usize, height: usize, populator: Layer) -> Layer2D {
-    let mut l = Layer2D { posx, posy, length, height, layers: vec![], char_count: 0 };
+    let mut l = Layer2D { posx, posy, length, height, layers: vec![], char_count: 0, stack_loc: 0 };
     l.populate(populator);
     l
   }
@@ -182,37 +188,95 @@ impl Layer2D {
   }
 }
 
+impl LayerArrangement {
+  fn new() -> LayerArrangement {
+    LayerArrangement { layer_stack: vec![] }
+  }
+
+  fn push(&mut self, layer: Layer2D) -> &mut Layer2D {
+    self.layer_stack.push(layer);
+    self.layer_stack.last_mut().unwrap()
+  }
+
+  fn pop(&mut self) -> Option<Layer2D> {
+    self.layer_stack.pop()
+  }
+}
+
+// locate index in stack
+fn locate_idx(len: usize, l: i32) -> usize {
+  match l <= 0 {
+    false => l as usize,
+    true => ((len - 1) as i32 + l) as usize
+  }
+}
+
 impl Terminal {
 
   /// Creates a new terminal
   pub fn new() -> Terminal {
     let win = initscr();
     win.keypad(true);
-    Terminal { win, layers: vec![], layer2ds: vec![] }
+    Terminal { win, layers: LayerArrangement::new() }
   }
 
+  // Adds a layer to the bottom of the layer 'queue'
   pub fn add_layer(&mut self, layer: Layer) -> &mut Layer {
-    self.layers.push(layer);
-    self.layers.last_mut().unwrap()
+    let mut r2d = Layer2D::new(layer.posx, layer.posy, 1, 1, layer);
+    r2d.stack_loc = -(self.layers.layer_stack.len() as i32);
+    self.layers.push(r2d).index(0, 0)
   }
 
+  // Adds a layer2D to the bottom of the layer 'queue'
   pub fn add_layer2d(&mut self, layer: Layer2D) -> &mut Layer2D {
-    self.layer2ds.push(layer);
-    self.layer2ds.last_mut().unwrap()
+    let mut r = layer.clone();
+    r.stack_loc = -(self.layers.layer_stack.len() as i32);
+    self.layers.push(layer)
   }
 
   /// Refreshes and re-draws all layers.
   pub fn refresh(&self) {
     self.win.refresh();
     let here = self.raw_posxy();
-    for layer in &self.layers {
-      self.draw_layer(layer);
-    }
-    for layer2d in &self.layer2ds {
-      self.draw_layer2d(layer2d);
+    for l2d in &self.layers.layer_stack {
+      self.draw_layer2d(l2d);
     }
     self.raw_move(here.0, here.1);
     self.win.refresh();
+  }
+
+  /// Returns the layer at the front.
+  pub fn layer_front(&self) -> &Layer2D {
+    self.layers.layer_stack.last().unwrap()
+  }
+
+  /// Returns the layer at the back.
+  pub fn layer_back(&self) -> &Layer2D {
+    self.layers.layer_stack.first().unwrap()
+  }
+
+  /// Swaps two layers. Check the `layer_locate` documentation about the number parameters.
+  pub fn layer_swap(&mut self, a: i32, b: i32) {
+    let len = self.layers.layer_stack.len();
+    self.layers.layer_stack.swap(locate_idx(len, a), locate_idx(len, b));
+  }
+
+  /// Locates a layer by the distance to the stack or by the last item -
+  /// 
+  /// A negative number such as -1 returns the layer *after* the top layer,
+  /// A positive number such as 1 returns the second to last layer,
+  /// A zero returns the *top* layer.
+  /// 
+  /// # Examples:
+  /// Imagine a stack:
+  /// ```
+  /// [ L1 ] <- `layer_locate(0)` or `layer_front()`
+  /// [ L2 ] <- `layer_locate(-1)`
+  /// [ L3 ] <- `layer_locate(1)` or `layer_locate(-2)`
+  /// [ L4 ] <- `layer_back()`
+  /// ```
+  pub fn layer_locate(&self, l: i32) -> &Layer2D {
+    &self.layers.layer_stack[locate_idx(self.layers.layer_stack.len(), l)]
   }
 
   /// Draws a layer to the console.
